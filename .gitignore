@@ -54,3 +54,6 @@ web/
 # Deployment artifacts
 backend/Dockerfile.langgraph
 config.yaml.bak
+
+# CodeBuddy settings (keep local, do not commit)
+.codebuddy/
