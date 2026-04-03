@@ -63,3 +63,10 @@ config.yaml.bak
 /frontend/playwright-report/
 .gstack/
 .worktrees
+
+# 临时文件和报告
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
