@@ -57,3 +57,9 @@ config.yaml.bak
 
 # CodeBuddy settings (keep local, do not commit)
 .codebuddy/
+
+.playwright-mcp
+/frontend/test-results/
+/frontend/playwright-report/
+.gstack/
+.worktrees
