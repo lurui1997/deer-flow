@@ -1,8 +1,8 @@
 """ARW Agent Factory - Agent Runtime Worker Agent 工厂.
 
-组装10层中间件链，创建配置化的 ARW Agent:
+组装完整的中间件链，创建配置化的 ARW Agent:
 
-中间件链顺序 (与文档 §2.3 对齐):
+中间件链顺序:
   1. TaskContextMiddleware      - 注入 ARC 任务需求
   2. ThreadDataMiddleware       - 创建工作目录 (继承自 DeerFlow)
   3. SkillLoaderMiddleware      - Skill 二级加载
@@ -13,6 +13,12 @@
   8. HITLMiddleware            - HITL 平台桥接 (wrap_tool_call 链最末位)
   9. EventReportMiddleware     - 事件上报
   10. GuardrailMiddleware      - 输出护栏 (after_model 链最末位)
+
+可观测性中间件 (穿插在核心链中):
+  - ThinkingMiddleware         - 捕获 LLM 思考内容 (after_model)
+  - ToolTracingMiddleware      - 工具调用全链路追踪 (wrap_tool_call)
+  - MCPTracingMiddleware       - MCP 调用追踪 (wrap_tool_call)
+  - WebSearchMiddleware        - 网页搜索观测 (wrap_tool_call)
 
 约束:
 - HITLMiddleware 必须位于 wrap_tool_call 链最末位
@@ -39,12 +45,16 @@ from deerflow.agents.middlewares.hitl_middleware import HITLMiddleware
 from deerflow.agents.middlewares.knowledge_retrieval_middleware import (
     KnowledgeRetrievalMiddleware,
 )
+from deerflow.agents.middlewares.mcp_tracing_middleware import MCPTracingMiddleware
 from deerflow.agents.middlewares.skill_loader_middleware import (
     SkillLoaderMiddleware,
 )
 from deerflow.agents.middlewares.task_context_middleware import (
     TaskContextMiddleware,
 )
+from deerflow.agents.middlewares.thinking_middleware import ThinkingMiddleware
+from deerflow.agents.middlewares.tool_tracing_middleware import ToolTracingMiddleware
+from deerflow.agents.middlewares.web_search_middleware import WebSearchMiddleware
 from deerflow.agents.run_config import RunConfig
 from deerflow.agents.worker_state import WorkerState
 from deerflow.tools.builtins import ask_clarification_tool
@@ -248,6 +258,34 @@ You have access to the `write_todos` tool to help you manage and track complex m
             )
         )
         logger.debug("ARW Factory: Added KnowledgeRetrievalMiddleware")
+
+    # ========================================================================
+    # Observability Layer: ThinkingMiddleware (captures LLM thinking content)
+    # ========================================================================
+    if config.enable_thinking_observability:
+        middleware_chain.append(ThinkingMiddleware())
+        logger.debug("ARW Factory: Added ThinkingMiddleware")
+
+    # ========================================================================
+    # Observability Layer: ToolTracingMiddleware (full tool call tracing)
+    # ========================================================================
+    if config.enable_tool_tracing:
+        middleware_chain.append(ToolTracingMiddleware())
+        logger.debug("ARW Factory: Added ToolTracingMiddleware")
+
+    # ========================================================================
+    # Observability Layer: MCPTracingMiddleware (MCP call tracing)
+    # ========================================================================
+    if config.enable_mcp_tracing:
+        middleware_chain.append(MCPTracingMiddleware())
+        logger.debug("ARW Factory: Added MCPTracingMiddleware")
+
+    # ========================================================================
+    # Observability Layer: WebSearchMiddleware (web search observation)
+    # ========================================================================
+    if config.enable_web_search_observability:
+        middleware_chain.append(WebSearchMiddleware())
+        logger.debug("ARW Factory: Added WebSearchMiddleware")
 
     # ========================================================================
     # Layer 17: CheckpointMiddleware

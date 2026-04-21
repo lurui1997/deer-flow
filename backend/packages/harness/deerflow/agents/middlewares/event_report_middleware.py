@@ -5,6 +5,7 @@
 - WebSocket 辅助通道实时推送
 - 展示流可恢复性支持 (ringbuffer, last_event_id 重连补流)
 - 事件类型对齐 LangGraph 流式协议
+- 可观测性指标集成
 
 双通道上报:
 - 主通道 (RocketMQ): Worker 直发事件到 agent_runtime_events
@@ -21,16 +22,21 @@ from langchain.agents.middleware import AgentMiddleware
 from langgraph.runtime import Runtime
 
 from deerflow.agents.worker_state import WorkerState
+from deerflow.observability.metrics import MetricsCollector
+from deerflow.observability.pipeline import ObservabilityEvent, emit_event
+from deerflow.observability.tracing import TracingMixin, get_current_trace_context, set_trace_context
+from deerflow.observability.types import ObservabilityEventType
 
 logger = logging.getLogger(__name__)
 
 
-class EventReportMiddleware(AgentMiddleware[WorkerState]):
-    """Report events via RocketMQ and WebSocket streaming.
+class EventReportMiddleware(AgentMiddleware[WorkerState], TracingMixin):
+    """Report events via RocketMQ and WebSocket streaming with observability.
 
     This middleware handles dual-channel event reporting:
     1. RocketMQ: Primary channel for task completion/failure, HITL requests
     2. WebSocket: Secondary channel for real-time progress/heartbeat
+    3. Observability: Metrics and structured events for monitoring
 
     Stream resumability:
     - Gateway maintains event ringbuffer per run
@@ -202,18 +208,41 @@ class EventReportMiddleware(AgentMiddleware[WorkerState]):
     def before_agent(self, state: WorkerState, runtime: Runtime) -> dict | None:
         """Report task start event."""
         task_context = state.get("task_context") or {}
+        agent_name = task_context.get("agent_name", "unknown")
+
+        # Initialize trace context
+        trace_ctx = self.start_span()
+        if task_context.get("scheduler_run_id"):
+            trace_ctx.scheduler_run_id = task_context["scheduler_run_id"]
+        trace_ctx.agent_name = agent_name
+        set_trace_context(trace_ctx)
 
         payload = {
-            "agent_name": task_context.get("agent_name"),
+            "agent_name": agent_name,
             "task_description": task_context.get("task_description"),
             "is_plan_mode": task_context.get("is_plan_mode"),
             "subagent_enabled": task_context.get("subagent_enabled"),
+            "trace_id": trace_ctx.trace_id,
         }
 
         self._emit_rocktmq_event(self.EVENT_TASK_STARTED, payload, state)
         self._emit_websocket_event(self.EVENT_TASK_STARTED, payload, state)
 
-        logger.info("EventReportMiddleware: Task started event emitted")
+        # Emit observability event
+        event = ObservabilityEvent(
+            event_type=ObservabilityEventType.AGENT_STARTED,
+            timestamp=time.time(),
+            trace_id=trace_ctx.trace_id,
+            span_id=trace_ctx.span_id,
+            payload=payload,
+        )
+        emit_event(event)
+
+        # Record metrics
+        MetricsCollector.record_agent_run(agent_name=agent_name, status="started")
+        MetricsCollector.set_active_threads(1)
+
+        logger.info("EventReportMiddleware: Task started event emitted, trace_id=%s", trace_ctx.trace_id)
         return None
 
     @override
@@ -237,20 +266,45 @@ class EventReportMiddleware(AgentMiddleware[WorkerState]):
     def on_agent_end(self, state: WorkerState, runtime: Runtime, output) -> None:
         """Report task completion event."""
         runtime_stats = state.get("runtime") or {}
+        task_context = state.get("task_context") or {}
+        agent_name = task_context.get("agent_name", "unknown")
+
+        duration = (
+            time.time() - runtime_stats.get("start_time")
+            if runtime_stats.get("start_time")
+            else None
+        )
 
         payload = {
             "status": "completed",
             "token_count": runtime_stats.get("token_count"),
             "checkpoint_count": runtime_stats.get("checkpoint_count"),
-            "duration": (
-                time.time() - runtime_stats.get("start_time")
-                if runtime_stats.get("start_time")
-                else None
-            ),
+            "duration": duration,
         }
 
         self._emit_rocktmq_event(self.EVENT_TASK_COMPLETED, payload, state)
         self._emit_websocket_event(self.EVENT_TASK_COMPLETED, payload, state)
+
+        # Emit observability event
+        trace_ctx = get_current_trace_context()
+        event = ObservabilityEvent(
+            event_type=ObservabilityEventType.AGENT_COMPLETED,
+            timestamp=time.time(),
+            trace_id=trace_ctx.trace_id if trace_ctx else None,
+            span_id=trace_ctx.span_id if trace_ctx else None,
+            payload={
+                "agent_name": agent_name,
+                "status": "completed",
+                "token_count": runtime_stats.get("token_count"),
+                "checkpoint_count": runtime_stats.get("checkpoint_count"),
+                "duration_sec": duration,
+            },
+        )
+        emit_event(event)
+
+        # Record metrics
+        MetricsCollector.record_agent_run(agent_name=agent_name, status="completed")
+        MetricsCollector.set_active_threads(0)
 
         logger.info("EventReportMiddleware: Task completed event emitted")
 
@@ -259,6 +313,9 @@ class EventReportMiddleware(AgentMiddleware[WorkerState]):
         self, state: WorkerState, runtime: Runtime, error: Exception
     ) -> None:
         """Report task failure event."""
+        task_context = state.get("task_context") or {}
+        agent_name = task_context.get("agent_name", "unknown")
+
         payload = {
             "status": "failed",
             "error": str(error),
@@ -267,6 +324,26 @@ class EventReportMiddleware(AgentMiddleware[WorkerState]):
 
         self._emit_rocktmq_event(self.EVENT_TASK_FAILED, payload, state)
         self._emit_websocket_event(self.EVENT_TASK_FAILED, payload, state)
+
+        # Emit observability event
+        trace_ctx = get_current_trace_context()
+        event = ObservabilityEvent(
+            event_type=ObservabilityEventType.AGENT_FAILED,
+            timestamp=time.time(),
+            trace_id=trace_ctx.trace_id if trace_ctx else None,
+            span_id=trace_ctx.span_id if trace_ctx else None,
+            payload={
+                "agent_name": agent_name,
+                "status": "failed",
+                "error": str(error),
+                "error_type": type(error).__name__,
+            },
+        )
+        emit_event(event)
+
+        # Record metrics
+        MetricsCollector.record_agent_run(agent_name=agent_name, status="failed")
+        MetricsCollector.set_active_threads(0)
 
         logger.error(
             "EventReportMiddleware: Task failed event emitted: %s", error

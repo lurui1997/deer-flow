@@ -140,6 +140,31 @@ class RunConfig:
     """启用 GuardrailMiddleware."""
 
     # ========================================================================
+    # Observability Feature Toggles
+    # ========================================================================
+
+    enable_thinking_observability: bool = True
+    """启用 ThinkingMiddleware (捕获 LLM 思考内容)."""
+
+    enable_tool_tracing: bool = True
+    """启用 ToolTracingMiddleware (工具调用全链路追踪)."""
+
+    enable_mcp_tracing: bool = True
+    """启用 MCPTracingMiddleware (MCP 调用追踪)."""
+
+    enable_web_search_observability: bool = True
+    """启用 WebSearchMiddleware (网页搜索观测)."""
+
+    enable_metrics: bool = True
+    """启用指标收集."""
+
+    enable_structured_logging: bool = True
+    """启用结构化日志."""
+
+    observability_sample_rate: float = 1.0
+    """可观测性事件采样率 (1.0 = 全量)."""
+
+    # ========================================================================
     # HITL Configuration
     # ========================================================================
 
@@ -234,6 +259,13 @@ class RunConfig:
             enable_hitl=payload.get("enable_hitl", True),
             enable_event_report=payload.get("enable_event_report", True),
             enable_guardrail=payload.get("enable_guardrail", True),
+            enable_thinking_observability=payload.get("enable_thinking_observability", True),
+            enable_tool_tracing=payload.get("enable_tool_tracing", True),
+            enable_mcp_tracing=payload.get("enable_mcp_tracing", True),
+            enable_web_search_observability=payload.get("enable_web_search_observability", True),
+            enable_metrics=payload.get("enable_metrics", True),
+            enable_structured_logging=payload.get("enable_structured_logging", True),
+            observability_sample_rate=payload.get("observability_sample_rate", 1.0),
             hitl_timeout_seconds=payload.get("hitl_timeout_seconds", 86400.0),
             auto_escalate_on_guardrail=payload.get(
                 "auto_escalate_on_guardrail", True

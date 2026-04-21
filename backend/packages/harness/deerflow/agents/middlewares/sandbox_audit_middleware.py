@@ -1,9 +1,17 @@
-"""SandboxAuditMiddleware - bash command security auditing."""
+"""SandboxAuditMiddleware - bash command security auditing with observability.
+
+Enhanced with detailed observability:
+- Command execution timing and resource tracking
+- Dangerous command detection with metrics
+- Structured audit records in WorkerState
+"""
 
 import json
 import logging
 import re
 import shlex
+import time
+import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import override
@@ -14,6 +22,11 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from deerflow.agents.thread_state import ThreadState
+from deerflow.agents.worker_state import WorkerState
+from deerflow.observability.metrics import MetricsCollector
+from deerflow.observability.pipeline import ObservabilityEvent, emit_event
+from deerflow.observability.tracing import get_current_trace_context
+from deerflow.observability.types import CommandAuditRecord, ObservabilityEventType
 
 logger = logging.getLogger(__name__)
 
@@ -195,13 +208,15 @@ def _classify_command(command: str) -> str:
 
 
 class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
-    """Bash command security auditing middleware.
+    """Bash command security auditing middleware with observability.
 
     For every ``bash`` tool call:
     1. **Command classification**: regex + shlex analysis grades commands as
        high-risk (block), medium-risk (warn), or safe (pass).
     2. **Audit log**: every bash call is recorded as a structured JSON entry
        via the standard logger (visible in langgraph.log).
+    3. **Observability**: detailed timing, resource usage, and dangerous
+       command detection with metrics.
 
     High-risk commands (e.g. ``rm -rf /``, ``curl url | bash``) are blocked:
     the handler is not called and an error ``ToolMessage`` is returned so the
@@ -212,6 +227,19 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
     """
 
     state_schema = ThreadState
+
+    # Dangerous command flag types for metrics
+    DANGER_FLAG_TYPES = {
+        r"rm\s+-[^\s]*r[^\s]*\s+(/\*?|~/?\*?|/home\b|/root\b)\s*$": "dangerous_delete",
+        r"dd\s+if=": "disk_operation",
+        r"mkfs": "disk_operation",
+        r"\|\s*(ba)?sh\b": "pipe_to_shell",
+        r"[`$]\(?\s*(curl|wget|bash|sh|python|ruby|perl|base64)": "command_substitution",
+        r"base64\s+.*-d.*\|": "base64_decode",
+        r"\b(LD_PRELOAD|LD_LIBRARY_PATH)\s*=": "linker_hijack",
+        r"/dev/tcp/": "bash_networking",
+        r"\S+\(\)\s*\{[^}]*\|\s*\S+\s*&": "fork_bomb",
+    }
 
     # ------------------------------------------------------------------
     # Helpers
@@ -241,6 +269,54 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
             "verdict": verdict,
         }
         logger.info("[SandboxAudit] %s", json.dumps(record, ensure_ascii=False))
+
+    def _create_audit_record(self, command: str, verdict: str) -> CommandAuditRecord:
+        """Create a command audit record for observability."""
+        danger_flags = []
+        if verdict == "block":
+            for pattern_str, flag_type in self.DANGER_FLAG_TYPES.items():
+                if re.search(pattern_str, command):
+                    danger_flags.append(flag_type)
+
+        return CommandAuditRecord(
+            command_id=str(uuid.uuid4()),
+            command=command[:1000] if len(command) > 1000 else command,
+            start_time=time.time(),
+            is_dangerous=verdict == "block",
+            danger_flags=danger_flags,
+        )
+
+    def _emit_command_event(self, record: CommandAuditRecord, event_type: str) -> None:
+        """Emit command execution observability event."""
+        trace_ctx = get_current_trace_context()
+        event = ObservabilityEvent(
+            event_type=event_type,
+            timestamp=record.end_time or time.time(),
+            trace_id=trace_ctx.trace_id if trace_ctx else None,
+            span_id=trace_ctx.span_id if trace_ctx else None,
+            payload={
+                "command_id": record.command_id,
+                "command_preview": record.command[:200] if record.command else "",
+                "sandbox_level": record.sandbox_level,
+                "duration_ms": record.duration_ms,
+                "exit_code": record.exit_code,
+                "is_dangerous": record.is_dangerous,
+                "danger_flags": record.danger_flags,
+                "status": record.status,
+            },
+        )
+        emit_event(event)
+
+    def _record_command_metrics(self, record: CommandAuditRecord) -> None:
+        """Record command execution metrics."""
+        duration_sec = (record.duration_ms or 0) / 1000.0
+        MetricsCollector.record_command_execution(
+            sandbox_level=record.sandbox_level,
+            duration_sec=duration_sec,
+        )
+        if record.is_dangerous:
+            for flag in record.danger_flags:
+                MetricsCollector.record_dangerous_command(flag_type=flag)
 
     def _build_block_message(self, request: ToolCallRequest, reason: str) -> ToolMessage:
         tool_call_id = str(request.tool_call.get("id") or "missing_id")
@@ -326,6 +402,27 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
     # wrap_tool_call hooks
     # ------------------------------------------------------------------
 
+    def _parse_result(self, record: CommandAuditRecord, result: ToolMessage | Command) -> None:
+        """Parse tool result to extract execution info."""
+        if isinstance(result, ToolMessage):
+            content = result.content
+            if isinstance(content, str):
+                # Try to extract exit code from common patterns
+                import re
+                exit_match = re.search(r"exit\s*code[:\s]*(\d+)", content.lower())
+                if exit_match:
+                    record.exit_code = int(exit_match.group(1))
+                else:
+                    record.exit_code = 0 if not result.status or result.status != "error" else 1
+
+                # Extract stdout/stderr preview
+                lines = content.split("\n")
+                record.stdout_preview = "\n".join(lines[:10])
+            record.status = "success" if result.status != "error" else "error"
+        else:
+            record.status = "success"
+            record.exit_code = 0
+
     @override
     def wrap_tool_call(
         self,
@@ -336,10 +433,39 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
             return handler(request)
 
         command, _, verdict, reject_reason = self._pre_process(request)
+
+        # Create audit record for observability
+        audit_record = self._create_audit_record(command, verdict)
+
         if verdict == "block":
             reason = reject_reason or "security violation detected"
+            audit_record.status = "blocked"
+            audit_record.end_time = time.time()
+            audit_record.duration_ms = 0
+            self._emit_command_event(audit_record, ObservabilityEventType.DANGEROUS_COMMAND_DETECTED)
+            self._record_command_metrics(audit_record)
             return self._build_block_message(request, reason)
-        result = handler(request)
+
+        try:
+            result = handler(request)
+            self._parse_result(audit_record, result)
+        except Exception as exc:
+            audit_record.status = "error"
+            audit_record.error_message = str(exc)
+            audit_record.exit_code = 1
+            raise
+        finally:
+            audit_record.end_time = time.time()
+            audit_record.duration_ms = int((audit_record.end_time - audit_record.start_time) * 1000)
+
+            event_type = (
+                ObservabilityEventType.COMMAND_EXECUTION_COMPLETED
+                if audit_record.status in ("success", "blocked")
+                else ObservabilityEventType.COMMAND_EXECUTION_FAILED
+            )
+            self._emit_command_event(audit_record, event_type)
+            self._record_command_metrics(audit_record)
+
         if verdict == "warn":
             result = self._append_warn_to_result(result, command)
         return result
@@ -354,10 +480,39 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
             return await handler(request)
 
         command, _, verdict, reject_reason = self._pre_process(request)
+
+        # Create audit record for observability
+        audit_record = self._create_audit_record(command, verdict)
+
         if verdict == "block":
             reason = reject_reason or "security violation detected"
+            audit_record.status = "blocked"
+            audit_record.end_time = time.time()
+            audit_record.duration_ms = 0
+            self._emit_command_event(audit_record, ObservabilityEventType.DANGEROUS_COMMAND_DETECTED)
+            self._record_command_metrics(audit_record)
             return self._build_block_message(request, reason)
-        result = await handler(request)
+
+        try:
+            result = await handler(request)
+            self._parse_result(audit_record, result)
+        except Exception as exc:
+            audit_record.status = "error"
+            audit_record.error_message = str(exc)
+            audit_record.exit_code = 1
+            raise
+        finally:
+            audit_record.end_time = time.time()
+            audit_record.duration_ms = int((audit_record.end_time - audit_record.start_time) * 1000)
+
+            event_type = (
+                ObservabilityEventType.COMMAND_EXECUTION_COMPLETED
+                if audit_record.status in ("success", "blocked")
+                else ObservabilityEventType.COMMAND_EXECUTION_FAILED
+            )
+            self._emit_command_event(audit_record, event_type)
+            self._record_command_metrics(audit_record)
+
         if verdict == "warn":
             result = self._append_warn_to_result(result, command)
         return result

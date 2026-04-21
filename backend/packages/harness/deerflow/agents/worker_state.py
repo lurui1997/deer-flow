@@ -23,6 +23,14 @@ from deerflow.agents.thread_state import (
     merge_viewed_images,
     ViewedImageData,
 )
+from deerflow.observability.types import (
+    CommandAuditRecord,
+    MCPCallSpan,
+    SkillExecutionRecord,
+    ThinkingRecord,
+    ToolCallSpan,
+    WebSearchRecord,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +271,25 @@ class WorkerState(AgentState):
 
     retrieved_knowledge: NotRequired[list[dict] | None]
     """RAG/MCP 检索结果（知识区）."""
+
+    # === 可观测性字段 ===
+    thinking_history: NotRequired[list[ThinkingRecord] | None]
+    """LLM 思考过程历史记录."""
+
+    tool_call_spans: NotRequired[list[ToolCallSpan] | None]
+    """工具调用追踪 Span 列表."""
+
+    skill_execution_records: NotRequired[list[SkillExecutionRecord] | None]
+    """Skill 执行记录列表."""
+
+    mcp_call_spans: NotRequired[list[MCPCallSpan] | None]
+    """MCP 调用追踪 Span 列表."""
+
+    web_search_records: NotRequired[list[WebSearchRecord] | None]
+    """网页搜索记录列表."""
+
+    command_audit_records: NotRequired[list[CommandAuditRecord] | None]
+    """命令执行审计记录列表."""
 
     # === LangGraph 标准字段（已在 AgentState 中定义） ===
     # messages: list[BaseMessage] - 完整对话与工具调用历史
