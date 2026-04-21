@@ -759,6 +759,8 @@ A heartfelt thank you goes out to the core authors of `DeerFlow`, whose vision, 
 
 Your unwavering commitment and expertise have been the driving force behind DeerFlow's success. We are honored to have you at the helm of this journey.
 
+<!-- Updated: 2026-04-21 -->
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.com/#bytedance/deer-flow&Date)

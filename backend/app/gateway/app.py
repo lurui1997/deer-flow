@@ -11,6 +11,7 @@ from app.gateway.routers import (
     artifacts,
     assistants_compat,
     channels,
+    hitl,
     mcp,
     memory,
     models,
@@ -95,6 +96,7 @@ API Gateway for DeerFlow - A LangGraph-based AI agent backend with sandbox execu
 - **Memory Management**: Access and manage global memory data for personalized conversations
 - **Skills Management**: Query and manage skills and their enabled status
 - **Artifacts**: Access thread artifacts and generated files
+- **HITL Control**: External API for human-in-the-loop workflow management
 - **Health Monitoring**: System health check endpoints
 
 ### Architecture
@@ -149,6 +151,10 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "description": "Manage IM channel integrations (Feishu, Slack, Telegram)",
             },
             {
+                "name": "hitl",
+                "description": "Human-in-the-Loop external control API for workflow integration and approval workflows",
+            },
+            {
                 "name": "assistants-compat",
                 "description": "LangGraph Platform-compatible assistants API (stub)",
             },
@@ -195,6 +201,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Channels API is mounted at /api/channels
     app.include_router(channels.router)
+
+    # HITL Control API is mounted at /api/hitl
+    app.include_router(hitl.router)
 
     # Assistants compatibility API (LangGraph Platform stub)
     app.include_router(assistants_compat.router)
