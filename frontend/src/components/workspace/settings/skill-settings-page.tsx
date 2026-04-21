@@ -23,7 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/core/i18n/hooks";
-import { useEnableSkill, useSkills } from "@/core/skills/hooks";
+import { useUpdateSkill, useSkills } from "@/core/skills/hooks";
 import type { Skill } from "@/core/skills/type";
 import { env } from "@/env";
 
@@ -58,7 +58,7 @@ function SkillSettingsList({
   const { t } = useI18n();
   const router = useRouter();
   const [filter, setFilter] = useState<string>("public");
-  const { mutate: enableSkill } = useEnableSkill();
+  const { mutate: enableSkill } = useUpdateSkill();
   const filteredSkills = useMemo(
     () => skills.filter((skill) => skill.category === filter),
     [skills, filter],

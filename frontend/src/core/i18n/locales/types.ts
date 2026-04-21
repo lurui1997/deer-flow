@@ -116,6 +116,9 @@ export interface Translations {
     chats: string;
     demoChats: string;
     agents: string;
+    skills: string;
+    hitl: string;
+    observability: string;
   };
 
   // Agents
@@ -246,6 +249,124 @@ export interface Translations {
     keyboardShortcutsDescription: string;
     openCommandPalette: string;
     toggleSidebar: string;
+  };
+
+  // Skills
+  skills: {
+    title: string;
+    description: string;
+    createSkill: string;
+    searchSkills: string;
+    allSkills: string;
+    publicSkills: string;
+    customSkills: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    editSkill: string;
+    deleteConfirm: string;
+    deleteSuccess: string;
+    saveSuccess: string;
+    rollbackSuccess: string;
+    editor: string;
+    history: string;
+    rollback: string;
+    rollbackTo: string;
+    noHistory: string;
+    skillContentPlaceholder: string;
+    author: string;
+    skillName: string;
+    skillNamePlaceholder: string;
+    nameRequired: string;
+    skillContent: string;
+    skillDetails: string;
+    skillDetailsDesc: string;
+    manualCreate: string;
+    aiCreate: string;
+    aiCreateTitle: string;
+    aiCreateDesc: string;
+    aiCreateHint: string;
+    aiCreateHintDesc: string;
+    startChat: string;
+    createSuccess: string;
+    enabled: string;
+    disabled: string;
+  };
+
+  // HITL
+  hitl: {
+    title: string;
+    description: string;
+    pendingCount: string;
+    searchPending: string;
+    filterByType: string;
+    allTypes: string;
+    noPending: string;
+    noPendingDesc: string;
+    loadError: string;
+    respond: string;
+    respondToClarification: string;
+    responsePlaceholder: string;
+    customResponse: string;
+    responseSubmitted: string;
+    threadId: string;
+    clarificationTypes: {
+      missing_info: string;
+      ambiguous_requirement: string;
+      approach_choice: string;
+      risk_confirmation: string;
+      suggestion: string;
+    };
+  };
+
+  // Observability
+  observability: {
+    title: string;
+    description: string;
+    healthy: string;
+    unhealthy: string;
+    totalThreads: string;
+    activeConversations: string;
+    activeRuns: string;
+    currentlyRunning: string;
+    interrupted: string;
+    waitingForHITL: string;
+    errors: string;
+    recentErrors: string;
+    threadsTab: string;
+    healthTab: string;
+    searchThreads: string;
+    filterByStatus: string;
+    allStatuses: string;
+    statusIdle: string;
+    statusBusy: string;
+    statusInterrupted: string;
+    statusError: string;
+    threadId: string;
+    status: string;
+    title: string;
+    updatedAt: string;
+    actions: string;
+    viewDetails: string;
+    noThreads: string;
+    threadDetails: string;
+    noTitle: string;
+    basicInfo: string;
+    runs: string;
+    state: string;
+    checkpoint: string;
+    metadata: string;
+    nextTasks: string;
+    values: string;
+    tasks: string;
+    noRuns: string;
+    noState: string;
+    healthStatus: string;
+    healthDescription: string;
+    serviceStatus: string;
+    serviceName: string;
+    endpoints: string;
+    endpointsDescription: string;
+    defaultAssistant: string;
   };
 
   // Settings
