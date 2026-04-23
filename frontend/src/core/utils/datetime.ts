@@ -14,6 +14,13 @@ function getDateFnsLocale(locale: Locale) {
   }
 }
 
+function toValidDate(date: Date | string | number | null | undefined): Date | null {
+  if (date == null || date === "") return null;
+  const dateObj = date instanceof Date ? date : new Date(date);
+  if (isNaN(dateObj.getTime())) return null;
+  return dateObj;
+}
+
 export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
   const effectiveLocale =
     locale ??
@@ -22,8 +29,8 @@ export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
     detectLocale();
 
   // Validate date
-  const dateObj = date instanceof Date ? date : new Date(date);
-  if (isNaN(dateObj.getTime())) {
+  const dateObj = toValidDate(date);
+  if (!dateObj) {
     return "-";
   }
 
@@ -31,4 +38,16 @@ export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
     addSuffix: true,
     locale: getDateFnsLocale(effectiveLocale),
   });
+}
+
+export function formatDateTime(date: Date | string | number | null | undefined): string {
+  const dateObj = toValidDate(date);
+  if (!dateObj) return "-";
+  return dateObj.toLocaleString();
+}
+
+export function formatDate(date: Date | string | number | null | undefined): string {
+  const dateObj = toValidDate(date);
+  if (!dateObj) return "-";
+  return dateObj.toLocaleDateString();
 }

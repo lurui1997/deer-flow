@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/core/i18n/hooks";
 import { useThreadRuns, useThreadState } from "@/core/observability";
 import type { AgentThread } from "@/core/threads/types";
+import { formatDate, formatDateTime } from "@/core/utils/datetime";
 
 interface ThreadDetailDialogProps {
   thread: AgentThread | null;
@@ -80,19 +81,11 @@ export function ThreadDetailDialog({
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-muted-foreground text-xs">{t.observability.createdAt}</div>
-                <div className="mt-1 text-sm">
-                  {thread.created_at
-                    ? new Date(thread.created_at).toLocaleString()
-                    : "-"}
-                </div>
+                <div className="mt-1 text-sm">{formatDateTime(thread.created_at)}</div>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-muted-foreground text-xs">{t.observability.updatedAt}</div>
-                <div className="mt-1 text-sm">
-                  {thread.updated_at
-                    ? new Date(thread.updated_at).toLocaleString()
-                    : "-"}
-                </div>
+                <div className="mt-1 text-sm">{formatDateTime(thread.updated_at)}</div>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-muted-foreground text-xs">{t.observability.checkpoint}</div>
@@ -132,7 +125,7 @@ export function ThreadDetailDialog({
                         </div>
                       </div>
                       <div className="text-right text-xs">
-                        <div>{new Date(run.created_at).toLocaleDateString()}</div>
+                        <div>{formatDate(run.created_at)}</div>
                         <div className="text-muted-foreground">{run.status}</div>
                       </div>
                     </div>

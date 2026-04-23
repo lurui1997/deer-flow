@@ -13,6 +13,8 @@ export function useAgents() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["agents"],
     queryFn: () => listAgents(),
+    staleTime: 30 * 1000, // 30秒内数据视为新鲜，不重新请求
+    gcTime: 5 * 60 * 1000, // 缓存5分钟
   });
   return { agents: data ?? [], isLoading, error };
 }

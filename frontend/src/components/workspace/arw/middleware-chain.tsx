@@ -129,7 +129,7 @@ export function MiddlewareChain({ middlewares, className }: MiddlewareChainProps
         </div>
         <CardDescription>ARW 10-layer middleware execution pipeline</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-y-auto max-h-[400px]">
         <div className="space-y-1">
           {items.map((middleware, index) => (
             <MiddlewareItem

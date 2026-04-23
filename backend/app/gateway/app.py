@@ -11,6 +11,7 @@ from app.gateway.routers import (
     artifacts,
     assistants_compat,
     channels,
+    chat,
     hitl,
     mcp,
     memory,
@@ -91,6 +92,7 @@ API Gateway for DeerFlow - A LangGraph-based AI agent backend with sandbox execu
 
 ### Features
 
+- **Chat API**: High-level chat completions with session continuity and HITL support
 - **Models Management**: Query and retrieve available AI models
 - **MCP Configuration**: Manage Model Context Protocol (MCP) server configurations
 - **Memory Management**: Access and manage global memory data for personalized conversations
@@ -163,6 +165,10 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "description": "LangGraph Platform-compatible runs lifecycle (create, stream, cancel)",
             },
             {
+                "name": "chat",
+                "description": "High-level chat completion API with session continuity and HITL support",
+            },
+            {
                 "name": "health",
                 "description": "Health check and system status endpoints",
             },
@@ -213,6 +219,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Stateless Runs API (stream/wait without a pre-existing thread)
     app.include_router(runs.router)
+
+    # Chat API (high-level chat completions with HITL support)
+    app.include_router(chat.router)
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict:
